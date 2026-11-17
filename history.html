@@ -1,0 +1,110 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Booking History | Smart Event Seat Allocation</title>
+   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=3">
+</head>
+<body>
+    <header class="site-header">
+        <div class="container">
+            <h1>Smart Event Seat Allocation System</h1>
+            <p>Manage and view your active bookings</p>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="panel">
+            <div class="history-panel">
+                <div>
+                    <h2>Booking History</h2>
+                    <p>View your active reservations and cancel a booking if needed.</p>
+                </div>
+                <a class="history-btn" href="{{ url_for('index') }}">
+                    Back to Dashboard
+                </a>
+            </div>
+        </section>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-message {{ category }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <section class="panel">
+            {% if bookings %}
+                <div class="table-wrapper">
+                    <table class="booking-table">
+                        <thead>
+                            <tr>
+                                <th>Booking ID</th>
+                                <th>Customer Name</th>
+                                <th>Email</th>
+                                <th>Seat</th>
+                                <th>Price</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for booking in bookings %}
+                                <tr>
+                                    <td>{{ booking['booking_id'] }}</td>
+                                    <td>{{ booking['customer_name'] }}</td>
+                                    <td>{{ booking['email'] }}</td>
+                                    <td>
+                                        {{ booking['seat_row'] }}{{ ((booking['seat_number'] - 1) % 10) + 1 }}
+                                    </td>
+                                    <td>₹{{ "%.2f"|format(booking['price']) }}</td>
+                                    <td>
+                                        <span class="status-booked">
+                                            {{ booking['status'] }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <form
+                                            action="{{ url_for('cancel_booking', booking_id=booking['booking_id']) }}"
+                                            method="POST"
+                                            onsubmit="return confirm('Are you sure you want to cancel this booking?');"
+                                        >
+                                            <button
+                                                type="submit"
+                                                class="cancel-btn"
+                                            >
+                                                Cancel Booking
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <h3>No Active Bookings</h3>
+                    <p>There are no active bookings to display.</p>
+                    <a class="history-btn" href="{{ url_for('index') }}">
+                        Book a Seat
+                    </a>
+                </div>
+            {% endif %}
+        </section>
+
+        <p class="bottom-link">
+            <a href="{{ url_for('index') }}">Return to the main dashboard</a>
+        </p>
+    </main>
+
+    <footer class="site-footer">
+        <p>Smart Event Seat Allocation System | DAA Mini Project</p>
+    </footer>
+</body>
+</html>

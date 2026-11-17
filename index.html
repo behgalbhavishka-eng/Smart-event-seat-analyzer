@@ -1,0 +1,526 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartSeat | Event Booking</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}?v=16">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        .donut-chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 380px;
+            height: 300px;
+            margin: 15px auto;
+        }
+
+        .donut-chart-container canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        .chart-card {
+            min-width: 0;
+        }
+
+        .chart-summary {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 15px;
+        }
+
+        .chart-summary span {
+            padding: 8px 12px;
+            border-radius: 20px;
+            background: #fff0f6;
+            color: #6b2847;
+            font-size: 13px;
+        }
+
+        .chart-summary strong {
+            margin-left: 4px;
+        }
+    </style>
+</head>
+
+<body>
+<div class="container">
+
+    <!-- Header -->
+    <header class="hero">
+        <div class="brand">🎟️ SMARTSEAT</div>
+        <h1>Your Event, Your Seat!</h1>
+        <p>Choose your favourite seat and book it in seconds.</p>
+        <a href="#seats" class="hero-button">Explore Seats ↓</a>
+    </header>
+
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+            <div class="message {{ category }}">{{ message }}</div>
+        {% endfor %}
+    {% endwith %}
+
+    <!-- Booking ticket -->
+    {% if ticket %}
+    <section class="ticket panel" id="ticket">
+        <div class="ticket-top">
+            <span>🎟️ SMARTSEAT</span>
+            <span class="ticket-status">BOOKING CONFIRMED</span>
+        </div>
+
+        <h2>Your E-Ticket</h2>
+        <p>Thank you! Your seat has been booked successfully.</p>
+
+        <div class="ticket-details">
+            <div>
+                <small>Booking ID</small>
+                <strong>{{ ticket["booking_id"] }}</strong>
+            </div>
+
+            <div>
+                <small>Passenger Name</small>
+                <strong>{{ ticket["customer_name"] }}</strong>
+            </div>
+
+            <div>
+                <small>Seat Number</small>
+                <strong>{{ ticket.get("seat_label", ticket["seat_number"]) }}</strong>
+            </div>
+
+            <div>
+                <small>Ticket Price</small>
+                <strong>₹{{ ticket["price"] }}</strong>
+            </div>
+
+            <div>
+                <small>Email</small>
+                <strong>{{ ticket["email"] }}</strong>
+            </div>
+        </div>
+
+        <button type="button" onclick="window.print()">
+            🖨️ Print Ticket
+        </button>
+    </section>
+    {% endif %}
+
+    <!-- Dashboard statistics -->
+    <section class="stats">
+        <div class="stat-card purple">
+            <span>🎫</span>
+            <p>Total Seats</p>
+            <h2>{{ total_seats }}</h2>
+        </div>
+
+        <div class="stat-card green">
+            <span>💺</span>
+            <p>Available Seats</p>
+            <h2>{{ available_seats }}</h2>
+        </div>
+
+        <div class="stat-card pink">
+            <span>👥</span>
+            <p>Booked Seats</p>
+            <h2>{{ booked_seats }}</h2>
+        </div>
+
+        <div class="stat-card gold">
+            <span>₹</span>
+            <p>Total Revenue</p>
+            <h2>₹{{ "%.0f"|format(revenue) }}</h2>
+        </div>
+    </section>
+
+    <!-- Seat selection -->
+    <section class="panel" id="seats">
+        <h2>🪑 Select Your Seat</h2>
+        <p>Click any green seat to select it for booking.</p>
+
+        <div class="legend">
+            <span><i class="dot available-dot"></i> Available</span>
+            <span><i class="dot booked-dot"></i> Booked</span>
+            <span><i class="dot selected-dot"></i> Selected</span>
+        </div>
+
+        <div class="screen">STAGE / SCREEN</div>
+
+        <div class="seat-layout">
+            {% for row in "ABCD" %}
+            <div class="seat-row">
+                <strong>ROW {{ row }}</strong>
+
+                {% for seat in seats %}
+                    {% if seat["seat_row"] == row %}
+                        {% if seat["status"] == "Available" %}
+                            <button
+                                type="button"
+                                class="seat available seat-choice"
+                                data-seat-key="{{ seat['seat_number'] }}"
+                                data-seat-label="{{ seat['seat_label'] }}"
+                                data-price="{{ seat['price'] }}"
+                                title="{{ seat['seat_label'] }} - ₹{{ seat['price'] }}">
+                                {{ seat["seat_label"] }}
+                            </button>
+                        {% else %}
+                            <span class="seat booked" title="Already booked">
+                                {{ seat["seat_label"] }}
+                            </span>
+                        {% endif %}
+                    {% endif %}
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="price-note">
+            Row A: ₹300 &nbsp;|&nbsp; Row B: ₹250
+            &nbsp;|&nbsp; Row C: ₹200 &nbsp;|&nbsp; Row D: ₹150
+        </div>
+    </section>
+
+    <!-- Booking form -->
+    <section class="panel" id="booking">
+        <h2>📝 Complete Your Booking</h2>
+        <p>Choose a seat above, then enter your details.</p>
+
+        <div class="selected-info" id="selected-info">
+            No seat selected yet.
+        </div>
+
+        <form action="{{ url_for('book') }}"
+              method="POST"
+              id="booking-form">
+
+            <input type="hidden"
+                   name="seat_number"
+                   id="seat_number"
+                   required>
+
+            <label for="customer_name">Full Name</label>
+            <input id="customer_name"
+                   type="text"
+                   name="customer_name"
+                   placeholder="Enter your full name"
+                   required>
+
+            <label for="email">Email Address</label>
+            <input id="email"
+                   type="email"
+                   name="email"
+                   placeholder="Enter your email address"
+                   required>
+
+            <button type="submit">🎟️ Confirm Booking</button>
+        </form>
+    </section>
+
+    <!-- Smart seat suggestion -->
+    <section class="panel">
+        <h2>✨ Smart Seat Suggestion</h2>
+        <p>Find an available seat in your preferred row.</p>
+
+        <form action="{{ url_for('suggest') }}" method="POST">
+            <label for="preferred_row">Preferred Row</label>
+
+            <select name="preferred_row" id="preferred_row">
+                <option value="">Any Row</option>
+                <option value="A">Row A — ₹300</option>
+                <option value="B">Row B — ₹250</option>
+                <option value="C">Row C — ₹200</option>
+                <option value="D">Row D — ₹150</option>
+            </select>
+
+            <button type="submit" class="secondary-button">
+                Suggest a Seat
+            </button>
+        </form>
+
+        {% if suggestion %}
+            <div class="suggestion">{{ suggestion }}</div>
+        {% endif %}
+    </section>
+
+    <!-- Booking analytics -->
+    <section class="panel" id="analytics">
+        <h2>📊 Booking Analytics</h2>
+        <p>Explore available seats, current bookings, and recorded cancellations.</p>
+
+        <div class="chart-grid">
+
+            <!-- Doughnut chart -->
+            <div class="chart-card">
+                <h3>🍩 Seat Status Distribution</h3>
+
+                <div class="donut-chart-container">
+                    <canvas id="seatStatusChart"></canvas>
+                </div>
+
+                <div class="chart-summary">
+                    <span>
+                        Available
+                        <strong>{{ available_seats }}</strong>
+                    </span>
+
+                    <span>
+                        Booked
+                        <strong>{{ booked_seats }}</strong>
+                    </span>
+
+                    <span>
+                        Cancellations
+                        <strong>{{ cancelled_seats | default(0) }}</strong>
+                    </span>
+                </div>
+            </div>
+
+            <!-- Booking summary -->
+            <div class="chart-card">
+                <h3>📈 Booking Summary</h3>
+
+                <div class="bar-label">
+                    <span>Booked Seats</span>
+                    <strong>{{ booked_seats }}</strong>
+                </div>
+
+                <div class="bar-track">
+                    <div class="progress-fill"
+                         style="--progress: {{ booked_percent }}%;">
+                    </div>
+                </div>
+
+                <div class="bar-label">
+                    <span>Available Seats</span>
+                    <strong>{{ available_seats }}</strong>
+                </div>
+
+                <div class="bar-track">
+                    <div class="progress-fill"
+                         style="--progress: {{ available_percent }}%;">
+                    </div>
+                </div>
+
+                <div class="revenue-box">
+                    <small>Revenue from current bookings</small>
+                    <strong>₹{{ "%.2f"|format(revenue) }}</strong>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- Current bookings -->
+    <section class="panel">
+        <h2>📋 Current Bookings</h2>
+        <p>Review bookings or cancel a reservation.</p>
+
+        {% if bookings %}
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Booking ID</th>
+                        <th>Customer</th>
+                        <th>Seat</th>
+                        <th>Price</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                {% for booking in bookings %}
+                    <tr>
+                        <td>{{ booking["booking_id"] }}</td>
+                        <td>{{ booking["customer_name"] }}</td>
+                        <td>{{ booking["seat_label"] }}</td>
+                        <td>₹{{ booking["price"] }}</td>
+                        <td>
+                            <form
+                                action="{{ url_for('cancel', booking_id=booking['booking_id']) }}"
+                                method="POST"
+                                onsubmit="return confirm('Cancel this booking?')">
+
+                                <button type="submit" class="cancel-button">
+                                    Cancel
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+            <div class="empty">
+                No bookings yet. Make your first reservation!
+            </div>
+        {% endif %}
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <h3>🎟️ Smart Event Seat Allocation System</h3>
+        <p>Built using Python, Flask, SQLite and a Greedy Algorithm</p>
+    </footer>
+
+</div>
+
+<!-- IMPORTANT: Flask supplies the chart data here -->
+<script id="status-chart-data" type="application/json">
+    {{ status_chart | tojson }}
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    // 1. Seat selection
+    const seatButtons = document.querySelectorAll(".seat-choice");
+    const seatInput = document.getElementById("seat_number");
+    const selectedInfo = document.getElementById("selected-info");
+    const bookingForm = document.getElementById("booking-form");
+
+    seatButtons.forEach(function (button) {
+        button.addEventListener("click", function () {
+
+            seatButtons.forEach(function (seat) {
+                seat.classList.remove("selected");
+            });
+
+            button.classList.add("selected");
+            seatInput.value = button.dataset.seatKey;
+
+            selectedInfo.textContent =
+                "Selected seat: " + button.dataset.seatLabel +
+                " | Price: ₹" + button.dataset.price;
+
+            selectedInfo.classList.add("has-selection");
+
+            document.getElementById("booking").scrollIntoView({
+                behavior: "smooth",
+                block: "start"
+            });
+        });
+    });
+
+    // 2. Validate booking form
+    if (bookingForm && seatInput) {
+        bookingForm.addEventListener("submit", function (event) {
+            if (!seatInput.value) {
+                event.preventDefault();
+                alert("Please click an available seat before booking.");
+            }
+        });
+    }
+
+    // 3. Get chart elements safely
+    const chartDataElement =
+        document.getElementById("status-chart-data");
+
+    const chartCanvas =
+        document.getElementById("seatStatusChart");
+
+    if (!chartDataElement || !chartCanvas) {
+        console.error("Chart data element or canvas is missing.", {
+            chartDataElement: chartDataElement,
+            chartCanvas: chartCanvas
+        });
+        return;
+    }
+
+    // 4. Read the JSON data from Flask
+    let statusData;
+
+    try {
+        statusData = JSON.parse(chartDataElement.textContent);
+    } catch (error) {
+        console.error("Could not parse chart data:", error);
+        return;
+    }
+
+    if (
+        !statusData ||
+        !Array.isArray(statusData.labels) ||
+        !Array.isArray(statusData.values)
+    ) {
+        console.error("Chart data must contain labels and values arrays.", statusData);
+        return;
+    }
+
+    // 5. Check that Chart.js loaded
+    if (typeof Chart === "undefined") {
+        console.error(
+            "Chart.js did not load. Check your internet connection."
+        );
+        return;
+    }
+
+    // 6. Draw the doughnut chart
+    new Chart(chartCanvas, {
+        type: "doughnut",
+
+        data: {
+            labels: statusData.labels,
+
+            datasets: [{
+                label: "Seat Status",
+                data: statusData.values,
+
+                backgroundColor: [
+                    "#35b779",
+                    "#e84d88",
+                    "#f3b544"
+                ],
+
+                borderColor: "#ffffff",
+                borderWidth: 4,
+                hoverOffset: 14
+            }]
+        },
+
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: "66%",
+
+            plugins: {
+                legend: {
+                    position: "bottom",
+                    labels: {
+                        padding: 18,
+                        usePointStyle: true,
+                        pointStyle: "circle"
+                    }
+                },
+
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            return context.label + ": " + context.raw;
+                        }
+                    }
+                }
+            },
+
+            animation: {
+                animateRotate: true,
+                animateScale: true,
+                duration: 900
+            }
+        }
+    });
+
+});
+</script>
+
+</body>
+</html>
+```
